@@ -1,7 +1,5 @@
 # -*- coding: utf-8 -*-
 """
-Created on Sat Nov 18 13:26:41 2017
-
 This script produces the simulated K+S training data required to run the 
 BEGRS analysis.
 
@@ -23,6 +21,13 @@ if __name__ == '__main__':
     setupPath = 'config'
     setupFiles = ['config.txt',
                   'flags.txt']
+    
+    # Data frequencies
+    dataFreqs = {'annual':{'tag':'a',
+                            'path':'parametrisations/annual/'},
+                 'quarterly':{'tag':'q',
+                           'path':'parametrisations/quarterly/'}
+                }
     
     # List of specifications simulated
     modelSpecs = [
@@ -53,14 +58,17 @@ if __name__ == '__main__':
                    }
      
     # Set parameters for the run
-    runMode = 'test'        # set to 'train' or 'test'
-    modChoice = 6
+    runMode = 'test'       # set to 'train' or 'test'
+    frequency = 'annual'    # set to 'quarterly' or 'annual'
+    modChoice = 6           # Pick a model spec
     numCores = 36
     numEval = 0
     numObs = 300
     
     # Create model path:
-    modelTag = modelSpecs[modChoice]['tag'] + paramConfig[runMode]['ext']
+    modelTag = (modelSpecs[modChoice]['tag'] + 
+                '_{:s}'.format(dataFreqs[frequency]['tag']) + 
+                paramConfig[runMode]['ext'])
     modPath = KSfolder + '//' + modelTag
     if not os.path.exists(modPath):
             os.makedirs(modPath,mode=0o777)
@@ -80,7 +88,7 @@ if __name__ == '__main__':
     
     # Import design
     designFile = modelSpecs[modChoice]['design']
-    design = import_design(designFile)
+    design = import_design(dataFreqs[frequency]['path'] + designFile)
     parameter_range = design['estimated']['range']
     
     # Create parametrisation

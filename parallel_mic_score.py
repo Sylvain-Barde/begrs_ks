@@ -16,6 +16,7 @@ import zipfile
 import zlib
 
 import numpy as np
+import pandas as pd
 import multiprocessing as mp
 import mic.toolbox as mt
 
@@ -25,32 +26,34 @@ def wrapper(inputs):
 
     tic = time.time()
     dropExit = True
+    KSfolder = 'K+S'
     
     # Unpack inputs and parameters
     params = inputs[0]
     var_vec_base = inputs[1]
     task    = inputs[2]
     
-    sim_dir    = params['sim_dir']
-    log_path   = params['log_path']
-    mod_name   = params['mod_name']
-    empPath    = params['empPath']
-    empSetting = params['empSetting']
-    policyFlag = params['policyFlag']
-    lb         = params['lb']
-    ub         = params['ub']
-    r_vec      = params['r_vec']
-    hp_bit_vec = params['hp_bit_vec']
-    mem        = params['mem']
-    lags       = params['lags']
-    d          = params['d']
-    num_runs   = params['num_runs']
+    sim_dir     = params['sim_dir']
+    log_path    = params['log_path']
+    modelTag    = params['mod_name']
+    empPathBase = params['empPath']
+    empSetting  = params['empSetting']
+    policyFlag  = params['policyFlag']
+    lb          = params['lb']
+    ub          = params['ub']
+    r_vec       = params['r_vec']
+    hp_bit_vec  = params['hp_bit_vec']
+    mem         = params['mem']
+    lags        = params['lags']
+    d           = params['d']
+    num_runs    = params['num_runs']
     
     # -- Declare task initialisation
     print (' Task number {:3d} initialised'.format(task))
     
     # Load simulated data
-    sim_path = 'K+S//' + mod_name + '//' + policyFlag + '//' + sim_dir + '//' + mod_name + '_data.pkl'
+    sim_path = os.path.join(KSfolder, modelTag, policyFlag, sim_dir, 
+                                modelTag + '_data.pkl')
     print (' Training load path:      ' + sim_path)
     fil = open(sim_path,'rb')
     datas = zlib.decompress(fil.read(),0)
@@ -58,11 +61,8 @@ def wrapper(inputs):
     simData = pickle.loads(datas,encoding="bytes")
     
     # Load empirical data, truncate as needed for empirical setting
-    emp_data = np.loadtxt(empPath, delimiter="\t") 
-    if empSetting == '_crisis':
-        emp_data = emp_data[29:,:]
-    elif empSetting == '_gm':
-        emp_data = emp_data[0:93,:]
+    empPath = empPathBase + empSetting['path'] + '.csv'
+    emp_data = pd.read_csv(empPath, index_col=0).to_numpy()
     
     emp_data_struct = mt.bin_quant(emp_data,lb,ub,r_vec,'notests')
     emp_data_bin = emp_data_struct['binary_data']
@@ -92,7 +92,7 @@ def wrapper(inputs):
         perm = mt.corr_perm(emp_data, r_vec, hp_bit_vec, var_vec, lags, d)
 
         # - Stage 1 - train tree with training data
-        tag = 'Model setting ' + mod_name
+        tag = 'Model setting ' + modelTag
         for j in range(num_runs):
             
             if len(simData[j]) == 0:
@@ -172,13 +172,16 @@ if __name__ == '__main__':
     # Load/Save directories
     sim_dir = 'simData'
     save_dir = 'scores'
-    empDataPath = 'us_data/empirical_dataset_new.txt'
-    originalCalib = False      # Flag for original calibration run
+    empDataPath = 'us_data/empirical_dataset_'
+    originalCalib = True      # Flag for original calibration run
 
-    # Pick empirical setting (fixes dataset + begrs estimates)
-    empChoice = 0
-    empSettings = ['_crisis',  # 0 - Crisis period
-                   '_gm']      # 1 - Great moderation
+    # Pick frequency setting (fixes dataset + begrs estimates)
+    frequency = 'quarterly'    # Set to 'quarterly' or 'annual'
+    dataFreqs = {'annual':{'tag':'a',
+                            'path':'annual'},
+                 'quarterly':{'tag':'q',
+                           'path':'quarterly'}
+                }
 
     # Pick training method from list (for robustness checks)
     methodChoice = 2
@@ -188,17 +191,16 @@ if __name__ == '__main__':
     
     # Simulated dataset from estimates
     if originalCalib:
-        models = ['KS_calib_orig_mc',         # Original baseline model
-                  'KS_calib_us_mc']     # baseline model - US calibrated
-        # models = ['KS_baseline_us_mc']      # baseline model - US calibrated
+        models = ['KS_calib_orig_mc']    # Original baseline model
     else:
-        models = ['KS_sobol4000_base_mc',   # baseline expectations
-                  'KS_sobol4000_exp1_mc',   # AR4 exp
-                  'KS_sobol4000_exp2_mc',   # Accel. exp
-                  'KS_sobol4000_exp3_mc',   # Adapt. exp
-                  'KS_sobol4000_exp4_mc',   # Extrapol. exp
-                  'KS_sobol4000_exp5_mc',   # Trend exp
-                  'KS_sobol4000_exp7_mc']   # LAA exp
+        models = ['KS_calib_us',         # US-calibrated
+                  'KS_sobol4000_base',   # baseline expectations
+                  'KS_sobol4000_exp1',   # AR4 exp
+                  'KS_sobol4000_exp2',   # Accel. exp
+                  'KS_sobol4000_exp3',   # Adapt. exp
+                  'KS_sobol4000_exp4',   # Extrapol. exp
+                  'KS_sobol4000_exp5',   # Trend exp
+                  'KS_sobol4000_exp7']   # LAA exp
     policyFlag = 'F_norule_M_tr2'       # Policy flag (no fiscal, dual Taylor)
     
     var_vec_base = [[10,9,8,7,6,5,4,3,2,1],    # 0
@@ -236,26 +238,27 @@ if __name__ == '__main__':
     
     numVars = len(var_vec_base[0])
     r_vec = numVars*[res]
-    empSetting = empSettings[empChoice]
+    # empSetting = empSettings[empChoice]
+    empSetting = dataFreqs[frequency]
     method = methods[methodChoice]
     if originalCalib:
         empTag = ''
     else:
-        empTag = empSetting
+        empTag = '_{:s}_mc'.format(empSetting['tag'])
     
     for model in models:
 
         t_start = time.time()     
         
         # Create logging directory
-        log_path = "logs//estimates"  + empSetting + '//' + method \
+        log_path = "logs//estimates_"  + frequency + '//' + method \
             + '//' + model + "//train_run_" + time.strftime("%d-%b-%Y_%H-%M-%S",
                     time.gmtime())
         print('Saving logs to: ' + log_path)
         os.makedirs(log_path,mode=0o777)
     
         # Create saving directory    
-        save_path = save_dir + '//estimates'  + empSetting + '//' + \
+        save_path = save_dir + '//estimates_'  + frequency + '//' + \
         method + '//' + model
         if not os.path.exists(save_path):
             os.makedirs(save_path,mode=0o777)
@@ -267,8 +270,8 @@ if __name__ == '__main__':
                       empPath = empDataPath,
                       empSetting = empSetting,
                       policyFlag = policyFlag,
-                      lb = [-10,-10,-60,-20,-12,-10,  0, 0, -10,  0],
-                      ub = [ 10, 10, 60, 20, 12, 10, 50, 7,  10, 12],
+                      lb = [-10,-10,-60,-20,-12,-10,  0,  0,-10,  0],
+                      ub = [ 10, 10, 60, 20, 12, 10, 50, 10, 10, 12],
                       r_vec = r_vec,
                       hp_bit_vec = [3, 3, 3, 3, 3, 3, 3, 3, 3, 3],
                       mem  = 1000000,

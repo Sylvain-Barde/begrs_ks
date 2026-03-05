@@ -368,7 +368,6 @@ def runKS(inputs):
     params = inputs[1]
     sample = inputs[2]
     
-    # numObs = settings['numObs']
     numObs = settings['numObs']
     KSfolder = settings['KSfolder']
     logPath = settings['logPath']
@@ -412,7 +411,6 @@ def runKS(inputs):
     errFile = open(logErrNameFull,'a')
     try: 
         subprocess.run(args,stdout=logFile,stderr=errFile,timeout=600)
-        # subprocess.run(args,stdout=logFile,stderr=errFile,timeout=500)
     except subprocess.TimeoutExpired:
         print(' Sample number {:3d} error - timeout'.format(sampleID))
         
@@ -433,7 +431,6 @@ def runKS(inputs):
         zipPath.close()
     
     # Process simulation data
-    # time.sleep(4)     #short pause - ensure output file is written (I/O issue)
     try:
         simData = processSimData(pathOutRoot, numObs)
     except Exception as e:

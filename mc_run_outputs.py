@@ -18,7 +18,8 @@ import scipy.stats as stats
 from statsmodels.iolib.table import SimpleTable
 
 #------------------------------------------------------------------------------
-def extractResults(model, empSetting):
+def extractResults(modelTag):
+        
     titleList = ['Mean GDP growth',
                  'Mean GDP growth volatility',
                  'Mean unemployment rate',
@@ -45,9 +46,9 @@ def extractResults(model, empSetting):
     for i, fiscalPolicy in enumerate(fiscalPolicies):
         for j, monetaryPolicy in enumerate (monetaryPolicies):
             
-            loadPath = (KSfolder + '/' + model + empSetting + '/' + 
+            loadPath = (KSfolder + '/' + modelTag + '/' + 
                         'F_{:s}_M_{:s}'.format(fiscalPolicy,monetaryPolicy) + 
-                        '/simData/' + model + empSetting + '_data.pkl')
+                        '/simData/' + modelTag + '_data.pkl')
             
             fil = open(loadPath,'rb')
             datas = zlib.decompress(fil.read(),0)
@@ -131,8 +132,7 @@ KSfolder = 'K+S'
 save_path_tables = 'tables'
 dropExit = True
 numMCIter = 1000
-save = False
-
+save = True
 
 fiscalPolicies = ['norule', 'sgp', 'fc', 'sgp_ec', 'fc_ec'] # in table order
 monetaryPolicies = ['tr1', 'tr2', 'spread']
@@ -143,12 +143,13 @@ monetaryLabels = ['$TR_{\pi}$','$TR_{\pi,U}$','$spread$']
 #------------------------------------------------------------------------------
 # Calibrated model results
 models = ['KS_calib_orig_mc',       # 0 - Original calibration
-          'KS_calib_us_mc']         # 1 - US calibration
+          'KS_calib_us_a_mc',#]       # 1 - US annual calibration
+          'KS_calib_us_q_mc']       # 1 - US annual calibration
 
 # Extract all data
 rawDataModels = []
 for model in models:
-    rawDataList, titleList = extractResults(model,'')
+    rawDataList, titleList = extractResults(model)
     rawDataModels.append(rawDataList)
 
 # Generate individual table panels and tile them as required
@@ -202,7 +203,7 @@ table = SimpleTable(
             tableFormatted,
             stubs = tableLabels,
             headers = tableHeaders,
-            title = 'Policy experiments, calibrated models (left, original; right, US calibration)',
+            title = 'Policy experiments, calibrated models (left, original; center, US calibration (annual), right, US calibration (quarterly))',
     )
 
 print(table)
@@ -224,31 +225,35 @@ if save is True:
 #------------------------------------------------------------------------------
 # Full estimated model results
 # Pick empirical setting (fixes dataset + begrs estimates)
-empSettings = ['_gm',      # 0 - Great moderation
-               '_crisis']  # 1 - Crisis period
-                
+dataFreqs = {'annual':{'tag':'a',
+                        'path':'annual'},
+              'quarterly':{'tag':'q',
+                        'path':'quarterly'}
+            }
+
+empSettings = list(dataFreqs.keys())
+
 # Simulated dataset from estimates
-models = ['KS_sobol4000_base_mc',   # 0 - baseline expectations
-          'KS_sobol4000_exp1_mc',   # 1 - AR4 exp
-          'KS_sobol4000_exp2_mc',   # 2 - Accel. exp
-          'KS_sobol4000_exp3_mc',   # 3 - Adapt. exp - Very volatile, high unemp
-          # 'KS_sobol4000_exp4_mc',   # 4 - Extrapol. exp - gdp OK
-          # 'KS_sobol4000_exp5_mc',   # 5 - Trend exp - seems OK
-          'KS_sobol4000_exp7_mc']   # 6 - LAA exp
+models = ['KS_sobol4000_base',   # 0 - baseline expectations
+             'KS_sobol4000_exp1',   # 1 - AR4 exp
+             'KS_sobol4000_exp2',   # 2 - Accel. exp
+             'KS_sobol4000_exp3',   # 3 - Adapt. exp - Very volatile, high unemp
+             'KS_sobol4000_exp7']   # 6 - LAA exp
 
 modelLabels = ['US est, baseline exp.',
                'US est, AR4 exp.',
                'US est, Accel. exp.',
                'US est, Adapt. exp.',
-               # 'US est, Extrapol. exp.',
-               # 'US est, Trend. exp.',
                'US est, LAA. exp.']
+
+
 
 for model, modelLabel in zip(models, modelLabels):
     # Extract all data for the model (both empirical settings)
     rawDataModels = []
-    for setting in empSettings:
-        rawDataList, titleList = extractResults(model,setting)
+    for key, freq in dataFreqs.items():
+        modelTag = model + '_{:s}_mc'.format(freq['tag'])
+        rawDataList, titleList = extractResults(modelTag)
         rawDataModels.append(rawDataList)
 
     # Generate individual table panels and tile them as required
@@ -271,7 +276,6 @@ for model, modelLabel in zip(models, modelLabels):
                     tableLabels = [title, *baseTblLabels]
                 initFlagRow = False
             else:
-                # baseTblFormatted = np.asarray(baseTblFormatted)
                 
                 colFormatted = np.concatenate((colFormatted, 
                                                hpad,

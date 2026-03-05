@@ -2,10 +2,9 @@
 """
 Created on Wed Oct 2 16:48:44 2024
 
-This script produces the plots for the Simulation-Based Calibration 
+This script produces the plots for the Simulated Bayesian Calibration 
 diagnostics on the convergence of the posterior obtained via BEGRS in 
-estimation of the K+S model on US macroeconomic data (figures 2, 3, 6 and 7 in
-the paper).
+estimation of the K+S model on US macroeconomic data (figure X in the paper).
 
 @author: Sylvain Barde, University of Kent
 
@@ -23,27 +22,30 @@ from scipy.stats import binom
 # SBC run configurations
 save = True
 color = True
+frequency = 'annual'    # Set to 'quarterly' or 'annual'
 
 save_path_figs = 'figures'
 dataPath = 'simData'
 sbcPath = 'sbc'
 fontSize = 20
 
+dataFreqs = {'annual':{'tag':'a',
+                        'path':'annual'},
+             'quarterly':{'tag':'q',
+                       'path':'quarterly'}
+            }
+
 modelTags = ['KS_sobol4000_base',   # modelChoice == 0
              'KS_sobol4000_exp1',   # modelChoice == 1
              'KS_sobol4000_exp2',   # modelChoice == 2
              'KS_sobol4000_exp3',   # modelChoice == 3
-             # 'KS_sobol4000_exp4',   # modelChoice == 4
-             # 'KS_sobol4000_exp5',   # modelChoice == 5
              'KS_sobol4000_exp7']   # modelChoice == 6
 
 modelNames = ['Baseline',
-              'AR(4)',
+              'AR4',
               'Accel.',
               'Adapt.',
-              # 'Extrapol.',
-              # 'Trend',
-              'A-A']
+              'LAA.']
 
 cvecDens = ['black','red','blue','green','cyan','magenta','gold']
 
@@ -80,6 +82,8 @@ plt.rcParams.update({
     "font.family": "serif",
     "font.serif": ["Computer Modern Roman"]})
 
+sbcPath += '/{:s}'.format(frequency)
+
 # Setup colors & adapt save folder
 if color is True:
     cvec = 'b'
@@ -88,12 +92,13 @@ else:
     cvec = 'k'
     save_path_figs += '/bw'
 
-# Generate BEGRS config string
+# Generate BEGRS config string and paths
 lrnStr = '{:f}'.format(learning_rate).replace('0.','').rstrip('0')
 begrsTag = 'ind_{:d}_lr_{:s}_ep_{:d}'.format(numInducingPts,
                                             lrnStr,
                                             numIter)
-savePathSBC = save_path_figs + '/sbc_{:s}'.format(begrsTag)
+savePathSBC = save_path_figs + '/sbc_{:s}_{:s}'.format(dataFreqs[frequency]['tag'],
+                                                       begrsTag)
 
 # Create save folder if required
 if save is True:
@@ -102,17 +107,17 @@ if save is True:
 
 #------------------------------------------------------------------------------
 # ESS plots
-y_max=0
-# subplotSpec = gridspec.GridSpec(ncols=3, nrows=3, hspace=0.25, wspace=0.2)
-subplotSpec = gridspec.GridSpec(ncols=3, nrows=2, hspace=0.25, wspace=0.2)
-
-fig = plt.figure(figsize=(16,9))
+fig = plt.figure(figsize=(16,9), constrained_layout = True)
+subplotSpec = gridspec.GridSpec(ncols=3, nrows=2, figure = fig)
 ndim = len(modelTags)
 axList = []
+
 for i in range(ndim):
 
     fil = open(sbcPath + 
-                '/{:s}_{:s}.pkl'.format(modelTags[i],begrsTag),
+                '/{:s}_{:s}_{:s}.pkl'.format(modelTags[i],
+                                             dataFreqs[frequency]['tag'],
+                                             begrsTag),
                 'rb')
     datas = zlib.decompress(fil.read(),0)
     fil.close()
@@ -124,27 +129,26 @@ for i in range(ndim):
     ESSbins = np.arange(0,ESS_max,step = 10)
     ax = fig.add_subplot(subplotSpec[i])
     res = ax.hist(distESS,bins = ESSbins, color = cvecDens[0],
-                  alpha=0.33)
+                  alpha=0.33,
+                  density = True)  
     
-    # Update maximum (must be common across plots)
-    y_max_curr = 1.25*max(res[0])
-    y_max = max(y_max, y_max_curr)
-    
-    # Format axes - stuff that doesn't depend on y_max
-    ax.axes.yaxis.set_ticks([])
+    # Format axes
+    y_max = 1.25*max(res[0])
     ax.set_xlim(left = 0,right = ESS_max)
+    ax.plot(ESS_max, 0, ">k", clip_on=False)
+    ax.set_xlabel('ESS',fontdict = {'fontsize': fontSize}),
+    ax.set_ylabel('dens.',fontdict = {'fontsize': fontSize}),
 
     ax.spines['top'].set_visible(False)
     ax.spines['right'].set_visible(False)
     ax.spines['bottom'].set_linewidth(2)
     ax.spines['left'].set_linewidth(2)
     ax.tick_params(axis='x', labelsize=fontSize)    
+    ax.tick_params(axis='y', labelsize=fontSize)    
     axList.append(ax)
 
-# Formatting all the stuff that depended on the maximum y-axis in particular)
-for i, ax in enumerate(axList):
     ax.plot([50,50], [0, y_max], linewidth=1, color = 'r', 
-                alpha=0.6, label = r'Calibr.')
+                alpha=0.6, label = r'Threshold.')
 
     # Annotate plot to add parameter name
     plt.text(0.5,0.85, '{:s}'.format(modelNames[i]), 
@@ -152,18 +156,24 @@ for i, ax in enumerate(axList):
              transform=ax.transAxes)
 
     ax.set_ylim(top = y_max, bottom = 0)
-    ax.plot(ESS_max, 0, ">k", clip_on=False)
     ax.plot(0, y_max, "^k", clip_on=False)
+
+leg = fig.legend(*ax.get_legend_handles_labels(), 
+                 loc='lower right', ncol= 1,
+                 frameon=False, prop={'size':fontSize})
 
 if save is True:
     plt.savefig(savePathSBC +  
-                '/sbc_ess_plot.pdf', format = 'pdf',bbox_inches='tight')
+                '/sbc_ess_{:s}_plot.pdf'.format(dataFreqs[frequency]['tag']), 
+                format = 'pdf',bbox_inches='tight')
 
 #------------------------------------------------------------------------------
 # Generate SBC rank plots by model
 for modelTag, modelName in zip(modelTags,modelNames):
     fil = open(sbcPath + 
-                '/{:s}_{:s}.pkl'.format(modelTag,begrsTag),
+                '/{:s}_{:s}_{:s}.pkl'.format(modelTag,
+                                             dataFreqs[frequency]['tag'],
+                                             begrsTag),
                 'rb')
     datas = zlib.decompress(fil.read(),0)
     fil.close()
@@ -194,9 +204,9 @@ for modelTag, modelName in zip(modelTags,modelNames):
     xlim_left = min(confidenceBoundsX) - x_range*0.025
     xlim_right = max(confidenceBoundsX) + x_range*0.025
     
-    # Generate Rank Plot for each parameter
-    subplotSpec = gridspec.GridSpec(ncols=4, nrows=5)
-    fig = plt.figure(figsize=(16,12))
+    # Generate Rank Plot for each parameter   
+    fig = plt.figure(figsize=(16,12),constrained_layout=True)
+    subplotSpec = gridspec.GridSpec(ncols=4, nrows=5, figure = fig)
     
     for i in range(len(labels)):
         
@@ -218,12 +228,12 @@ for modelTag, modelName in zip(modelTags,modelNames):
         yMax = 3*max(confidenceBoundsY)
     
         # Annotate
-        plt.text(0.9,0.9, r'${:s}$'.format(labels[i]), 
+        plt.text(0.5,0.8, r'${:s}$'.format(labels[i]), 
                  fontsize = fontSize,
                  transform=ax.transAxes)
     
-        ax.set_ylabel(''),
-        ax.set_xlabel('')
+        ax.set_ylabel('dens.',fontdict = {'fontsize': fontSize})
+        ax.set_xlabel('Rank',fontdict = {'fontsize': fontSize})
         ax.axes.yaxis.set_ticks([])
     
         ax.set_ylim(top = yMax, bottom = 0)
@@ -239,10 +249,11 @@ for modelTag, modelName in zip(modelTags,modelNames):
         ax.tick_params(axis='y', labelsize=fontSize) 
             
     leg = fig.legend(*ax.get_legend_handles_labels(), 
-                     loc='lower center', ncol= 2,
+                     loc='lower right', ncol= 2,
                      frameon=False, prop={'size':fontSize})
             
     if save is True:
         plt.savefig(savePathSBC +  
-                    '/{:s}_sbc.pdf'.format(modelTag), 
+                    '/{:s}_{:s}_sbc.pdf'.format(modelTag,
+                                                dataFreqs[frequency]['tag']), 
                     format = 'pdf',bbox_inches='tight')

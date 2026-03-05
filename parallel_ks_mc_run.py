@@ -27,57 +27,58 @@ if __name__ == '__main__':
     setupPath = 'config'
     setupFiles = ['config.txt',
                   'flags.txt']
-    empSettings = {0:{'name':'estimates_crisis',
-                      'tag':'_crisis'},
-                   1:{'name':'estimates_gm',
-                      'tag':'_gm'}}
+    
+    dataFreqs = {'annual':{'tag':'a',
+                            'path':'parametrisations/annual/'},
+                 'quarterly':{'tag':'q',
+                           'path':'parametrisations/quarterly/'}
+                }
+    
     policies = {'fiscal':{'flags':['flag_balancedbudget']*5,
                           'values':[0,1,2,3,4],
-                          'tags':['norule', 'sgp_ec', 'sgp', 'fc_ec', 'fc']},
+                          'tags':['norule', 'sgp_ec', 'fc_ec', 'sgp', 'fc']},
                 'monetary':{'flags':['flagTAYLOR']*2 + ['flag_bonds'],
                               'values':[1,2,3],
                               'tags':['tr1', 'tr2', 'spread']}}
     dropExit = True      # Use to drop firm entry/exit variable
-    numSamples = 1000       # Number of MC replications
+    numSamples = 1000    # Number of MC replications
     numObs = 300        # Number of observations per replication
     
     # Pick specific model and estimate to use
     expMode = 7  # Expectation choice - None or 0-5,7
-    usCalib = True  # Only if expMode is None - Values:
+    usCalib = True  # Only used if expMode is None - Values:
                     # - True: US quarterly calibration
                     # - False: original calibration
     
-    empMode = 1     # Empirical setting - 0 or 1 (ignored for baseline cases)
+    frequency = 'quarterly'    # set to 'quarterly' or 'annual'
     mean = True     # Use to pick which BEGRS vector to simulate
     
     # Construct paths to design files and output folders
-    baseline = False     # Baseline parametrisation flag
+    baseline = False    # Baseline parametrisation flag
     if expMode is None: # Original baseline KS model - For replication
         baseline = True
         if usCalib is True:
-            # designFile = 'KS_params_baseline_us_20.csv'
-            # modelTagSave = 'KS_baseline_us_mc_20'
             designFile = 'KS_params_calib_us.csv'
-            modelTagSave = 'KS_calib_us_mc'
+            modelTagSave = 'KS_calib_us_{:s}_mc'.format(
+                                    dataFreqs[frequency]['tag'])
         else:
             designFile = 'KS_params_calib_orig.csv'
             modelTagSave = 'KS_calib_orig_mc'
         
     elif expMode == 0:  # Baseline expectations model with estimated paramters
         designFile = 'KS_params_exp_base.csv'
-        modelTagLoad = 'KS_sobol4000_base'
-        modelTagSave = 'KS_sobol4000_base_mc'
+        modelTagLoad = 'KS_sobol4000_base_{:s}'.format(
+                                dataFreqs[frequency]['tag'])
+        modelTagSave = 'KS_sobol4000_base_{:s}_mc'.format(
+                                dataFreqs[frequency]['tag'])
         
     else:               # Alternate expectatons model with estimated parameters
         designFile = 'KS_params_exp{:d}.csv'.format(expMode)
-        modelTagLoad = 'KS_sobol4000_exp{:d}'.format(expMode)
-        modelTagSave = 'KS_sobol4000_exp{:d}_mc'.format(expMode)
+        modelTagLoad = 'KS_sobol4000_exp{:d}_{:s}'.format(expMode,
+                                dataFreqs[frequency]['tag'])
+        modelTagSave = 'KS_sobol4000_exp{:d}_{:s}_mc'.format(expMode,
+                                dataFreqs[frequency]['tag'])
     
-    # Extract paths to empirical settings (Not used in baseline case)
-    if baseline is False:
-        estimateName = empSettings[empMode]['name'] 
-        modelTagSave += empSettings[empMode]['tag']
-
     # Create overall path for base deisgn (will store all 15 policy runs)
     modPathBase = KSfolder + '//' + modelTagSave
     if not os.path.exists(modPathBase):
@@ -101,13 +102,16 @@ if __name__ == '__main__':
     
     # Import design and set estimated parameter values (Not used for baseline)
     samples = {}
-    base_design = import_design(designFile)
+    designPath = dataFreqs[frequency]['path'] + '/' + designFile
+    base_design = import_design(designPath)
     if baseline is True:
         sample = np.asarray([]) # Empty parameter settings
     else:
         # Load empirical BEGRS NUTS samples to parameterise simulation
-        fil = open(modelPath + '/' + modelTagLoad + namePad  + saveName + 
-           '/' + estimateName + '.pkl','rb')        
+        fil = open(modelPath + '/{:s}/'.format(frequency) + 
+                   modelTagLoad + namePad  + saveName + '/' + 
+                   'estimates.pkl','rb')
+        
         datas = fil.read()
         fil.close()
         results = pickle.loads(datas,encoding="bytes")

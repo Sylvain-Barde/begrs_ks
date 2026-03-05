@@ -17,10 +17,8 @@ import os
 from corner import corner
 from begrs import begrs
 
-
 # Select empirical dataset
-diagnosticPlots = False         # Show diagnostic plots on main estiamte
-expectationPlots = False        # Show expectation parameter plots
+diagnosticPlots = True         # Show diagnostic plots on main estimate
 save = True
 color = True
 fontSize = 20
@@ -32,32 +30,30 @@ KSfolder = 'K+S'
 dataPath = 'simData'
 modelPath = 'models'
 
-models = ['KS_sobol4000_base_cut',
-          'KS_sobol4000_exp1_cut',
-          'KS_sobol4000_exp2_cut',
-          'KS_sobol4000_exp3_cut',
-          # 'KS_sobol4000_exp4_cut',
-          # 'KS_sobol4000_exp5_cut',
-          'KS_sobol4000_exp7_cut']
+modelTags = ['KS_sobol4000_base',   # modelChoice == 0
+             'KS_sobol4000_exp1',   # modelChoice == 1
+             'KS_sobol4000_exp2',   # modelChoice == 2
+             'KS_sobol4000_exp3',   # modelChoice == 3
+             'KS_sobol4000_exp7']   # modelChoice == 6
 
 rowNames = ['US mean est, basline exp.',
             'US est, AR(4) exp.',
             'US est, Accel. exp.',
             'US est, Adapt. exp.',
-            # 'US est, Extrapol. exp.',
-            # 'US est, Trend. exp.',
             'US est, A-A exp.']
 
 modNames = ['Baseline',
             'AR(4)',
             'Accel.',
             'Adapt.',
-            # 'Extrapol.',
-            # 'Trend',
             'A-A']
 
-estimates = ['estimates_full', 'estimates_gm', 'estimates_crisis']
-estimateNames = ['Full sample', 'Great moderation', 'Crisis']
+dataFreqs = {'annual':{'tag':'a',
+                        'path':'annual'},
+             'quarterly':{'tag':'q',
+                       'path':'quarterly'}
+            }
+dropExit = True     # Drop the firm exit variable (not used in new data)
 
 cvecDens = ['black','red','blue','green','cyan','magenta','gold']
 
@@ -157,240 +153,197 @@ saveName = '/begrs_batch_{:d}_ind_{:d}_lr_{:s}_ep_{:d}'.format(
                 str(learning_rate)[2:],
                 numIter) 
 
+if dropExit is True:
+    namePad = '_cut'
+else:
+    namePad = ''
+
+modelTag = modelTags[0] +'_{:s}'.format(dataFreqs['annual']['tag'])
 begrsEst = begrs()
-begrsEst.load( modelPath + '/' + models[0]  + saveName)
+begrsEst.load( modelPath + '/{:s}/'.format(dataFreqs['annual']['path']) + 
+               modelTag + namePad + saveName)
 parameter_range = begrsEst.parameter_range
 
 # Generate diagnostic plots (if requested)
 if diagnosticPlots:
+
+    for freq in dataFreqs:
     
-    # Load NUTS Samples
-    fil = open(modelPath + '/' + models[0] + saveName + '/' 
-               + estimates[0] +'.pkl','rb')
-    datas = fil.read()
-    fil.close()
-    results = pickle.loads(datas,encoding="bytes")
-    flatSamples = results['samples']
-    
-    # Sample plot - visual check for autocorrelation in MCMC chains
-    fig = plt.figure(figsize=(20,10))
-    ax = fig.add_subplot(1, 1, 1)
-    ax.plot(flatSamples)
-    
-    # Corner plot  - visual check for any correlation in parameter estimates
-    figure = corner(flatSamples)
+        # Load NUTS Samples
+        modelTag = modelTags[0] +'_{:s}'.format(dataFreqs[freq]['tag'])
+        fil = open(modelPath + '/{:s}/'.format(dataFreqs[freq]['path']) + 
+                   modelTag + namePad  + saveName + '/' + 
+                   'estimates.pkl','rb')
+        datas = fil.read()
+        fil.close()
+        results = pickle.loads(datas,encoding="bytes")
+        flatSamples = results['samples']
+        
+        # Sample plot - visual check for autocorrelation in MCMC chains
+        fig = plt.figure(figsize=(20,10))
+        ax = fig.add_subplot(1, 1, 1)
+        ax.plot(flatSamples)
+        
+        # Corner plot - visual check for any correlation in parameter estimates
+        figure = corner(flatSamples)
 
 #-----------------------------------------------------------------------------
 # Plots for common parameter estimates across expectation specifications
-print('Generating common parameter plots, full sample, by expectation')
-
-subplotSpec = gridspec.GridSpec(ncols=4, nrows=5, hspace=0.25, wspace=0.2)
-fig = plt.figure(figsize=(16,12))
-ndim = len(variables)
-for i in range(ndim):
+print('Generating common parameter plots, both samples, by expectation')
+for freq in dataFreqs:
     
-    x_range = parameter_range[i,1] - parameter_range[i,0]
-    xlim_left = parameter_range[i,0] - x_range*0.025
-    xlim_right = parameter_range[i,1] + x_range*0.025
-    y_max = 0
-
-    ax = fig.add_subplot(subplotSpec[i])
-    for j, model in enumerate(models):
-
-        fil = open(modelPath + '/' + model + saveName + '/' 
-                   + estimates[0] + '.pkl','rb')
-        datas = fil.read()
-        fil.close()
-        results = pickle.loads(datas,encoding="bytes")
-        mode = results['mode']
-        flatSamples = results['samples']
-
-        d = flatSamples[:,i]  
-        res = ax.hist(x=d, bins='fd', density = True, edgecolor = 'None', 
-                      color = cvecDens[j], alpha=0.33, label = modNames[j])
+    fig = plt.figure(figsize=(16,12),constrained_layout=True)
+    subplotSpec = gridspec.GridSpec(ncols=4, nrows=5, figure = fig)
+    ndim = len(variables)
+    for i in range(ndim):
+        
+        x_range = parameter_range[i,1] - parameter_range[i,0]
+        xlim_left = parameter_range[i,0] - x_range*0.025
+        xlim_right = parameter_range[i,1] + x_range*0.025
+        y_max = 0
     
-        y_max_curr = 1.25*max(res[0])
-        y_max = max(y_max, y_max_curr)
+        ax = fig.add_subplot(subplotSpec[i])
+        for j, model in enumerate(modelTags):
     
-    ax.plot([params[i],params[i]], [0, y_max], linewidth=1, color = cvec, 
-            alpha=0.6, label = r'Calibr.')
+            modelTag = model +'_{:s}'.format(dataFreqs[freq]['tag'])
+            fil = open(modelPath + '/{:s}/'.format(dataFreqs[freq]['path']) + 
+                       modelTag + namePad  + saveName + '/' + 
+                       'estimates.pkl','rb')
+            datas = fil.read()
+            fil.close()
+            results = pickle.loads(datas,encoding="bytes")
+            mode = results['mode']
+            flatSamples = results['samples']
     
-    # Annotate plot to add parameter name
-    plt.text(0.9,0.9, r'${:s}$'.format(variables[i]), 
-             fontsize = fontSize,
-             transform=ax.transAxes)
+            d = flatSamples[:,i]  
+            res = ax.hist(x=d, bins='fd', density = True, edgecolor = 'None', 
+                          color = cvecDens[j], alpha=0.33, label = modNames[j])
+        
+            y_max_curr = 1.25*max(res[0])
+            y_max = max(y_max, y_max_curr)
+        
+        ax.plot([params[i],params[i]], [0, y_max], linewidth=1, color = cvec, 
+                alpha=0.6, label = r'Calibr.')
+        
+        # Format axes
+        ax.set_ylabel('dens.',
+                      fontdict = {'fontsize': fontSize})
+        ax.set_xlabel(r'${:s}$'.format(variables[i]),
+                      fontdict = {'fontsize': fontSize})
+        ax.axes.yaxis.set_ticks([])
+        
+        ax.set_ylim(top = y_max, bottom = 0)
+        ax.set_xlim(left = xlim_left,right = xlim_right)
+        ax.plot(xlim_right, 0, ">k", clip_on=False)
+        ax.plot(xlim_left, y_max, "^k", clip_on=False)
+        
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        ax.spines['bottom'].set_linewidth(2)
+        ax.spines['left'].set_linewidth(2)
+        ax.tick_params(axis='x', labelsize=fontSize)
+        ax.tick_params(axis='y', labelsize=fontSize)
+        
+    leg = fig.legend(*ax.get_legend_handles_labels(), 
+                     loc='lower right', ncol= 3,
+                     frameon=False, prop={'size':fontSize})
     
-    # Format axes
-    ax.set_ylabel(''),
-    ax.set_xlabel('')
-    ax.axes.yaxis.set_ticks([])
-    
-    ax.set_ylim(top = y_max, bottom = 0)
-    ax.set_xlim(left = xlim_left,right = xlim_right)
-    ax.plot(xlim_right, 0, ">k", clip_on=False)
-    ax.plot(xlim_left, y_max, "^k", clip_on=False)
-    
-    ax.spines['top'].set_visible(False)
-    ax.spines['right'].set_visible(False)
-    ax.spines['bottom'].set_linewidth(2)
-    ax.spines['left'].set_linewidth(2)
-    ax.tick_params(axis='x', labelsize=fontSize)
-    ax.tick_params(axis='y', labelsize=fontSize)
-    
-leg = fig.legend(*ax.get_legend_handles_labels(), 
-                 loc='lower center', ncol= 3,
-                 frameon=False, prop={'size':fontSize})
-
-if save is True:
-    plt.savefig(save_path_figs + "/dens_by_exp.pdf", 
-                format = 'pdf',bbox_inches="tight")
+    if save is True:
+        plt.savefig(save_path_figs + "/dens_by_exp_{:s}.pdf".format(freq), 
+                    format = 'pdf',bbox_inches="tight")
 
 #-----------------------------------------------------------------------------
 # Plots for common parameter estimates across empirical samples
-print('Generating common parameter plots, baseline expectations, by sample')
+print('Generating common parameter plots, LAA expectations, by sample')
 
-subplotSpec = gridspec.GridSpec(ncols=4, nrows=5, hspace=0.25, wspace=0.2)
-fig = plt.figure(figsize=(16,12))
-theta_mean = np.zeros([len(variables),len(estimates)])
+model_thetas = []
 
-# Density plots per parameter
-for i in range(ndim):
-    x_range = parameter_range[i,1] - parameter_range[i,0]
-    xlim_left = parameter_range[i,0] - x_range*0.025
-    xlim_right = parameter_range[i,1] + x_range*0.025
+for modelTag_base, modName in zip(modelTags, modNames):
+
+    fig = plt.figure(figsize=(16,12),constrained_layout=True)
+    subplotSpec = gridspec.GridSpec(ncols=4, nrows=5, figure = fig)
+    theta_mean = np.zeros([len(variables),len(dataFreqs)])
     
-    y_max = 0
-    ax = fig.add_subplot(subplotSpec[i])
-
-    for j, estimate in enumerate(estimates):
-
-        fil = open(modelPath + '/' + models[0] + saveName + '/' 
-                   + estimate + '.pkl','rb')
-        datas = fil.read()
-        fil.close()
-        results = pickle.loads(datas,encoding="bytes")
-
-        flatSamples = results['samples']
-        theta_mean[:,j] = np.mean(flatSamples[:,0:len(variables)], axis = 0)
+    # Density plots per parameter
+    for i in range(ndim):
+        x_range = parameter_range[i,1] - parameter_range[i,0]
+        xlim_left = parameter_range[i,0] - x_range*0.025
+        xlim_right = parameter_range[i,1] + x_range*0.025
+        
+        y_max = 0
+        ax = fig.add_subplot(subplotSpec[i])
+    
+        for j, freq in enumerate(dataFreqs):
+    
+            # modelTag = modelTags[-1] +'_{:s}'.format(dataFreqs[freq]['tag'])
+            modelTag = modelTag_base +'_{:s}'.format(dataFreqs[freq]['tag'])
+            fil = open(modelPath + '/{:s}/'.format(dataFreqs[freq]['path']) + 
+                       modelTag + namePad  + saveName + '/' + 
+                       'estimates.pkl','rb')
             
-        d = flatSamples[:,i]  
-        res = ax.hist(x=d, bins='fd', density = True, edgecolor = 'None', 
-                      color = cvecDens[j], alpha=0.33,label = estimateNames[j])
+            datas = fil.read()
+            fil.close()
+            results = pickle.loads(datas,encoding="bytes")
     
-        y_max_curr = 1.25*max(res[0])
-        y_max = max(y_max, y_max_curr)
-    
-    ax.plot([params[i],params[i]], [0, y_max], linewidth=1, color = cvec, 
-            alpha=0.6, label = r'Calibr.')
-    
-    # Annotate plot to add parameter name
-    plt.text(0.9,0.9, r'${:s}$'.format(variables[i]), 
-             fontsize = fontSize,
-             transform=ax.transAxes)
-    
-    # Format axes
-    ax.set_ylabel(''),
-    ax.set_xlabel('')
-    ax.axes.yaxis.set_ticks([])
-    
-    ax.set_ylim(top = y_max, bottom = 0)
-    ax.set_xlim(left = xlim_left,right = xlim_right)
-    ax.plot(xlim_right, 0, ">k", clip_on=False)
-    ax.plot(xlim_left, y_max, "^k", clip_on=False)
-    
-    ax.spines['top'].set_visible(False)
-    ax.spines['right'].set_visible(False)
-    ax.spines['bottom'].set_linewidth(2)
-    ax.spines['left'].set_linewidth(2)
-    ax.tick_params(axis='x', labelsize=fontSize)
-    ax.tick_params(axis='y', labelsize=fontSize)
-    
-leg = fig.legend(*ax.get_legend_handles_labels(), 
-                 loc='lower center', ncol= 4,
-                 frameon=False, prop={'size':fontSize})
-    
-if save is True:
-    plt.savefig(save_path_figs + "/dens_by_sample.pdf", format = 'pdf', 
-                bbox_inches="tight")
-    
-#-----------------------------------------------------------------------------
-# Plots for estimates of additional expectation parameters
-if expectationPlots:
-
-    models.pop(0)
-    modNames.pop(0)
-    
-    print('Generating additional expectation plots on full estimates')
-    
-    for j, model in enumerate(models):
-        
-        # Load models for specific parameter range
-        begrsEst = begrs()
-        begrsEst.load( modelPath + '/' + model  + saveName)
-        parameter_range = begrsEst.parameter_range
-        
-        # Load empirical Samples
-        fil = open(modelPath + '/' + model + saveName + '/' 
-                   + estimates[0] +'.pkl','rb')
-        datas = fil.read()
-        fil.close()
-        results = pickle.loads(datas,encoding="bytes")
-        
-        flatSamples = results['samples']
-        
-        for i in range(ndim,flatSamples.shape[1]):
-            d = flatSamples[:,i]
-            x_range = parameter_range[i,1] - parameter_range[i,0]
-            xlim_left = parameter_range[i,0] - x_range*0.025
-            xlim_right = parameter_range[i,1] + x_range*0.025
-            
-            fig = plt.figure(figsize=(16,12))
-            ax = fig.add_subplot(1, 1, 1)
+            flatSamples = results['samples']
+            theta_mean[:,j] = np.mean(flatSamples[:,0:len(variables)], axis = 0)
+                
+            d = flatSamples[:,i]  
             res = ax.hist(x=d, bins='fd', density = True, edgecolor = 'None', 
-                          color = 'black', alpha=0.4, label = modNames[j])
-            y_max = 1.25*max(res[0])
-    
-            ax.set_xlabel(r'$\theta_{:d}$'.format(i+1-ndim), 
-                          fontdict = {'fontsize': fontSize})
-            ax.set_ylabel(r'$p(\theta_{:d})$'.format(i+1-ndim), rotation=0, 
-                          labelpad=100, fontdict = {'fontsize': fontSize})
-            ax.xaxis.set_label_coords(.925, -.06)
-            ax.yaxis.set_label_coords(-.10, .925)
-            ax.axes.yaxis.set_ticks([])
-            ax.legend(loc='best', frameon=False, prop={'size':fontSize})
+                          color = cvecDens[j], alpha=0.33,
+                          label = freq)
         
-            ax.set_ylim(top = y_max, bottom = 0)
-            ax.set_xlim(left = xlim_left,right = xlim_right)
-            ax.plot(xlim_right, 0, ">k", clip_on=False)
-            ax.plot(xlim_left, y_max, "^k", clip_on=False)
-            
-            ax.spines['top'].set_visible(False)
-            ax.spines['right'].set_visible(False)
-            ax.spines['bottom'].set_linewidth(2)
-            ax.spines['left'].set_linewidth(2)
-            ax.tick_params(axis='x', labelsize=fontSize)    
-            ax.tick_params(axis='y', labelsize=fontSize)
-            
-            if save is True:
-                plt.savefig(save_path_figs + "/dens_{:s}_ex{:d}.pdf".format(
-                    model,i+1-ndim), format = 'pdf',
+            y_max_curr = 1.25*max(res[0])
+            y_max = max(y_max, y_max_curr)
+        
+        model_thetas.append(theta_mean)
+        ax.plot([params[i],params[i]], [0, y_max], linewidth=1, color = cvec, 
+                alpha=0.6, label = r'Calibr.')
+        
+        # Format axes
+        ax.set_ylabel('dens.',
+                      fontdict = {'fontsize': fontSize})
+        ax.set_xlabel(r'${:s}$'.format(variables[i]),
+                      fontdict = {'fontsize': fontSize})
+        ax.axes.yaxis.set_ticks([])
+        
+        ax.set_ylim(top = y_max, bottom = 0)
+        ax.set_xlim(left = xlim_left,right = xlim_right)
+        ax.plot(xlim_right, 0, ">k", clip_on=False)
+        ax.plot(xlim_left, y_max, "^k", clip_on=False)
+        
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        ax.spines['bottom'].set_linewidth(2)
+        ax.spines['left'].set_linewidth(2)
+        ax.tick_params(axis='x', labelsize=fontSize)
+        ax.tick_params(axis='y', labelsize=fontSize)
+        
+    leg = fig.legend(*ax.get_legend_handles_labels(), 
+                     loc='lower right', ncol= 3,
+                     frameon=False, prop={'size':fontSize})
+        
+    if save is True:
+        plt.savefig(save_path_figs + "/dens_by_sample_{:s}.pdf".format(
+                    modName), format = 'pdf', 
                     bbox_inches="tight")
+
 #-----------------------------------------------------------------------------
-# Latex table of estimates
+# Latex table of estimates - Uses AA for the table
 l1 = max([len(var) for var in variableDescr])
 l2 = max([len(var) for var in variables])
-l3 = 7
+l3 = 6
 
-rowStr = ('{:s} {:l1s} & ${:l2s}$ & {:l3g} & {:l3g} - {:l3g} & {:l3.3f} & {:l3.3f} & {:l3.3f}  \\\\')
+rowStr = ('{:s} {:l1s} & ${:l2s}$ & {:l3g} & {:l3g} - {:l3g} & {:l3.3f} & {:l3.3f}  \\\\')
 rowStr = rowStr.replace('l1','{:d}'.format(l1))
 rowStr = rowStr.replace('l2','{:d}'.format(l2))
 rowStr = rowStr.replace('l3','{:d}'.format(l3))
 
 tableStr = []
-tableStr.append('\\begin{tabular}{lcrrrrr}')
+tableStr.append('\\begin{tabular}{lcrrrr}')
 tableStr.append('\\hline')
-tableStr.append('\\B \\T  & & & Prior & \\multicolumn{3}{c}{Posterior Mean} \\\\')
-tableStr.append('\\multicolumn{2}{c}{Parameter} \\B \\T & Baseline & Range & Full & GM & Crisis \\\\')
+tableStr.append('\\T  & & & Prior & \\multicolumn{2}{c}{Posterior Mean} \\\\')
+tableStr.append('\\multicolumn{2}{c}{Parameter} \\B & Baseline & Range & Annual & Quartely \\\\')
 tableStr.append('\\hline')
 for i in range(ndim):
     if i == 0:
@@ -406,9 +359,10 @@ for i in range(ndim):
                                   params[i],
                                   parameter_range[i,0],
                                   parameter_range[i,1],
-                                  theta_mean[i,0],
-                                  theta_mean[i,1],
-                                  theta_mean[i,2]))
+                                  model_thetas[-1][i,0],  # last model, so AA
+                                  model_thetas[-1][i,1])) # last model, so AA
+                                  # theta_mean[i,0],
+                                  # theta_mean[i,1]))
     
 tableStr.append('\\hline')
 tableStr.append('\\end{tabular}')

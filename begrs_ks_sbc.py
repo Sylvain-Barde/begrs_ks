@@ -11,6 +11,7 @@ model on the full simulated K+ testing data.
 import numpy as np
 import pickle
 import zlib
+import os
 
 from begrs import begrs, begrsNutsSampler, begrsSbc
 
@@ -19,6 +20,13 @@ KSfolder = 'K+S'
 simDataPath = 'simData'
 savePath = 'sbc'
 modelPath = 'models'
+
+dataFreqs = {'annual':{'tag':'a',
+                        'path':'annual'},
+             'quarterly':{'tag':'q',
+                       'path':'quarterly'}
+            }
+
 modelTags = ['KS_sobol4000_base',   # modelChoice == 0
              'KS_sobol4000_exp1',   # modelChoice == 1
              'KS_sobol4000_exp2',   # modelChoice == 2
@@ -28,7 +36,8 @@ modelTags = ['KS_sobol4000_base',   # modelChoice == 0
              'KS_sobol4000_exp7']   # modelChoice == 6
 
 # Select training data parameters (to identify trained model)
-modelChoice = 1     # Choose model from list above
+frequency = 'annual'    # Set to 'quarterly' or 'annual'
+modelChoice = 3     # Choose model from list above
 dropExit = True     # Drop the firm exit variable (not used in dew data)
 numInducingPts = 250     # Number of inducing points
 batchSize = 20000        # Size of training minibatches (mainly a speed issue)
@@ -49,12 +58,16 @@ if dropExit is True:
     namePad = '_cut'
 else:
     namePad = ''
+    
+savePath += '/{:s}'.format(dataFreqs[frequency]['path'])
+if not os.path.exists(savePath):
+    os.makedirs(savePath,mode=0o777)
 
 # Load trained Begrs model
-modelTag = modelTags[modelChoice] 
+modelTag = modelTags[modelChoice] +'_{:s}'.format(dataFreqs[frequency]['tag'])
 begrsEst = begrs()
-begrsEst.load( modelPath + '/' + modelTag + namePad + saveName)
-
+begrsEst.load( modelPath + '/{:s}/'.format(dataFreqs[frequency]['path']) + 
+               modelTag + namePad + saveName)
 #-----------------------------------------------------------------------------
 # Load SBC testing data
 # Load samples & parameter ranges

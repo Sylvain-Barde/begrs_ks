@@ -6,7 +6,6 @@ This scripts trains a BEGRS surrogate on the simulated data produced by the
 Dosi et. al (2015) financial K+S model.
 
 @author: Sylvain Barde, University of Kent
-
 """
 
 import numpy as np
@@ -19,6 +18,13 @@ from begrs import begrs
 KSfolder = 'K+S'
 dataPath = 'simData'
 modelPath = 'models'
+
+dataFreqs = {'annual':{'tag':'a',
+                        'path':'annual'},
+             'quarterly':{'tag':'q',
+                       'path':'quarterly'}
+            }
+
 modelTags = ['KS_sobol4000_base',   # modelChoice == 0
              'KS_sobol4000_exp1',   # modelChoice == 1
              'KS_sobol4000_exp2',   # modelChoice == 2
@@ -28,7 +34,8 @@ modelTags = ['KS_sobol4000_base',   # modelChoice == 0
              'KS_sobol4000_exp7']   # modelChoice == 6
 
 # Setup training data parameters
-modelChoice = 6     # Choose model from list above
+frequency = 'annual'    # Set to 'quarterly' or 'annual'
+modelChoice = 6         # Choose model from list above
 numSamples = 4000   # Choose No samples (has to be less than available in data)
 numObs = 300        # Choose No obs (has to be less than available in data)
 dropExit = True     # Drop the firm exit variable (not used)
@@ -41,9 +48,9 @@ numIter = 100            # Number of epoch iterations
 learning_rate = 0.0005   # Learning rate
 
 # Load samples & parameter ranges
-modelTag = modelTags[modelChoice]
+modelTag = modelTags[modelChoice] +'_{:s}'.format(dataFreqs[frequency]['tag'])
 fil = open(KSfolder + '/' + 
-           modelTag + '/' + 
+           modelTag +  '/' + 
            dataPath + '/parampool.pkl','rb')
 datas = fil.read()
 fil.close()
@@ -93,7 +100,8 @@ begrsEst.train(numLatents, numInducingPts, batchSize, numIter,
                 learning_rate)
 
 # Save trained model
-savePath = modelPath + '/' + modelTag + namePad
+savePath = (modelPath + '/{:s}/'.format(dataFreqs[frequency]['path']) + 
+            modelTag + namePad)
 if not os.path.exists(savePath):
     os.makedirs(savePath,mode=0o777)
 
